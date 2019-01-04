@@ -1,0 +1,154 @@
+--- # configures security for rapberry pi
+- hosts: {{ "hostname"}}
+  remote_user: ansible
+  become: yes
+  become_method: sudo
+  connection: ssh
+  gather_facts: yes
+  
+  # tasks to validate when online
+  # user module - check update_password parameter and password encryption
+  # validate cron job update code
+  # validate yaml spacing different in example
+  # add the ssh config location "{{ sshd_config_path }}"
+  # create dans authorized key file
+  # do you need " disable root login task" 
+  # check handler indentation
+  
+  tasks:
+
+# Package installs
+  - name: Update apt packages list
+    apt:
+      upgrade: no
+      update_cache: yes
+      cache_valid_time: 86400 #One day
+  
+  - name: Install required packages
+    apt:  
+      name: "{{ item }}"
+    with_items:
+      - ufw
+      - fail2ban
+
+# Alternate user creation - check module
+#  - name: Create alternative user
+#    user:
+#      name: dan
+#      group: sudo
+#      uid: 5000
+#      password: {{ "mypassword" }}
+#      state: present
+#      update_password: always
+#      shell: /bin/bash
+  
+  # Update open SSH daily via cron job
+  - name: Establish Cronjob to update the openssh-server package on a daily basis
+    cron:
+      name: Cronjob to update the openssh-server package on a daily basis
+      user: root
+      minute: "0"
+      hour: "0"
+      day: "*"
+      month: "*"
+      weekday: "*"
+      state: present
+      job: "apt-get install openssh-server -y"
+  
+  # sshd hardening
+  - name: Set users that are allowed to use SSH
+    lineinfile:
+      path: /etc/ssh/sshd_config
+      insertafter: "EOF"
+      line: "AllowUsers dan ansible"
+    
+  
+  - name: Set users that are not allowed to use SSH
+    lineinfile:
+      path: /etc/ssh/sshd_config
+      insertafter: "EOF"
+      line: "DenyUsers pi root"
+  
+  - name: Disable ChallengeResponseAuthentication
+    lineinfile:
+      path: /etc/ssh/sshd_config
+      regexp: "^ChallengeResponseAuthentication"
+      line: "ChallengeResponseAuthentication no"
+  
+  
+  - name: Disable PasswordAuthentication
+    lineinfile:
+      path: /etc/ssh/sshd_config
+      regexp: "^PasswordAuthentication"
+      line: "PasswordAuthentication no"
+  
+      
+  - name: Disable UsePAM
+    lineinfile:
+      path: /etc/ssh/sshd_config
+      regexp: "^UsePAM"
+      line: "UsePAM no"
+    
+  
+  - name: Disable Root Login
+    lineinfile:
+      path: /etc/ssh/sshd_config
+      regexp: "^PermitRootLogin"
+      line: "PermitRootLogin no"
+    
+    
+ # # copy ssh pub key for user dan
+ # - name: Copy authorized_keys file to Raspberry Pi
+ #   copy:
+ #     src: /home/ansible/ansible/playbooks/piesecurity/templates/authorized_keys
+ #     dest: "/home/dan/.ssh/"
+ #     owner: dan
+ #     group: root
+ #     mode: 0644
+  
+  # add UFW firewall rules
+  - name: Start and enable UFW
+    ufw:
+      state: enabled
+  
+  - name: Establish default incoming firewall rule
+    ufw:
+      policy: deny
+      direction: incoming
+  
+  - name: Establish default outgoing firewall rule
+    ufw:
+      policy: allow
+      direction: outgoing
+  
+  - name: Establish ssh firewall rule
+    ufw:
+      rule: limit
+      port: ssh
+      proto: tcp
+  
+  # Apply fail2ban config
+  - name: Override some basic fail2ban configurations
+    copy:
+      src: /home/ansible/ansible/playbooks/piesecurity/templates/jail.local.j2
+      dest: /etc/fail2ban/jail.local
+      owner: root
+      group: root
+      mode: 0644
+  
+  # restart SSH and  fail2ban
+  - name: Restart service ssh
+    service:
+      name: sshd
+      state: restarted
+
+  - name: Restart service fail2ban
+    service:
+      name: fail2ban
+      state: restarted
+
+
+
+
+
+ 
